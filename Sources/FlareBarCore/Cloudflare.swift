@@ -168,10 +168,9 @@ public struct CloudflareClient {
         let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let result = obj?["result"] as? [[String: Any]] ?? []
         let paid = result.contains { row in
-            let product = (row["product"] as? [String: Any])?["name"] as? String ?? ""
-            let id = row["id"] as? String ?? ""
-            return product.localizedCaseInsensitiveContains("workers") && (product.localizedCaseInsensitiveContains("paid") || id.contains("workers_paid"))
-                || product == "workers_paid"
+            let ratePlan = (row["rate_plan"] as? [String: Any])?["id"] as? String ?? ""
+            let product = (row["product"] as? [String: Any])?["public_name"] as? String ?? ""
+            return ratePlan == "workers_paid" || product.localizedCaseInsensitiveContains("workers paid")
         }
         return paid ? .paid : .free
     }
