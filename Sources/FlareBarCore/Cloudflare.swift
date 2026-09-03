@@ -142,14 +142,17 @@ public struct CloudflareClient {
     private struct Account { var tag: String; var name: String }
 
     private func accounts() async throws -> [Account] {
-        let q = "{ viewer { accounts { tag name } } }"
-        let json = try await graphql(q)
-        guard let viewer = json["data"] as? [String: Any],
-              let viewerObj = viewer["viewer"] as? [String: Any],
-              let list = viewerObj["accounts"] as? [[String: Any]]
+        var req = URLRequest(url: URL(string: "https://api.cloudflare.com/client/v4/accounts?per_page=50")!)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (data, resp) = try await session.data(for: req)
+        guard let http = resp as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
+            throw CloudflareError.graphql("Token cannot list accounts")
+        }
+        guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let list = obj["result"] as? [[String: Any]]
         else { throw CloudflareError.decode }
         return list.compactMap { a in
-            guard let tag = a["tag"] as? String else { return nil }
+            guard let tag = a["id"] as? String else { return nil }
             return Account(tag: tag, name: a["name"] as? String ?? tag)
         }
     }
