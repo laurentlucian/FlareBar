@@ -164,6 +164,16 @@ struct MenuBarView: View {
             }
             Spacer()
             if model.isRefreshing { ProgressView().controlSize(.mini) }
+            if let tag = model.snapshot?.accountTag {
+                Button {
+                    NSWorkspace.shared.open(URL(string: "https://dash.cloudflare.com/\(tag)/workers-and-pages")!)
+                } label: {
+                    Image(systemName: "arrow.up.right.square")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Open dashboard")
+            }
         }
     }
 
