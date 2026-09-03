@@ -21,6 +21,9 @@ final class AppModel {
     var notificationsEnabled: Bool {
         didSet { UserDefaults.standard.set(notificationsEnabled, forKey: "notificationsEnabled") }
     }
+    var iconBarCount: Int {
+        didSet { UserDefaults.standard.set(iconBarCount, forKey: "iconBarCount") }
+    }
 
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var timerTask: Task<Void, Never>?
@@ -30,6 +33,8 @@ final class AppModel {
 
     init() {
         notificationsEnabled = UserDefaults.standard.bool(forKey: "notificationsEnabled")
+        let stored = UserDefaults.standard.integer(forKey: "iconBarCount")
+        iconBarCount = stored == 0 ? 3 : stored
         if let data = UserDefaults.standard.data(forKey: "snapshot"),
            let snap = try? JSONDecoder().decode(UsageSnapshot.self, from: data) {
             snapshot = snap

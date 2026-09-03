@@ -67,34 +67,38 @@ final class MenuBarController: NSObject {
     }
 
     private func updateIcon() {
-        let pct = model.snapshot?.hottest?.percent ?? 0
+        let bars = (model.snapshot?.bars ?? []).sorted { $0.percent > $1.percent }.prefix(model.iconBarCount).map(\.percent)
         let stale = model.connection != .ready && model.snapshot != nil
-        statusItem.button?.image = IconRenderer.image(percent: pct, stale: stale || model.connection == .failed(""))
+        statusItem.button?.image = IconRenderer.image(percents: Array(bars), count: model.iconBarCount, stale: stale || model.connection == .failed(""))
         statusItem.button?.image?.isTemplate = true
-        statusItem.button?.toolTip = model.snapshot.map { String(format: "%.0f%% %@", $0.hottest?.percent ?? 0, $0.hottest?.title ?? "") } ?? "FlareBar"
+        statusItem.button?.toolTip = model.snapshot.map { snap in
+            snap.bars.sorted { $0.percent > $1.percent }.prefix(model.iconBarCount)
+                .map { String(format: "%@ %.0f%%", $0.title, $0.percent) }.joined(separator: "\n")
+        } ?? "FlareBar"
     }
 }
 
 enum IconRenderer {
-    static func image(percent: Double, stale: Bool) -> NSImage {
-        let s: CGFloat = 18
-        let img = NSImage(size: NSSize(width: s, height: s), flipped: false) { rect in
-            let inset: CGFloat = 2
-            let r = rect.insetBy(dx: inset, dy: inset)
-            let track = NSBezierPath(ovalIn: r)
-            track.lineWidth = 2
-            NSColor.labelColor.withAlphaComponent(0.25).setStroke()
-            track.stroke()
-            let fill = NSBezierPath()
-            fill.lineWidth = 2
-            fill.lineCapStyle = .round
-            let start = CGFloat(-Double.pi / 2)
-            let end = start + CGFloat(min(100, max(0, percent)) / 100 * 2 * Double.pi)
-            fill.appendArc(withCenter: CGPoint(x: rect.midX, y: rect.midY), radius: r.width / 2, startAngle: start * 180 / .pi, endAngle: end * 180 / .pi, clockwise: false)
-            (percent >= 95 ? NSColor.systemRed : percent >= 80 ? NSColor.systemOrange : NSColor.labelColor)
-                .withAlphaComponent(stale ? 0.4 : 1)
-                .setStroke()
-            fill.stroke()
+    static func image(percents: [Double], count: Int, stale: Bool) -> NSImage {
+        let n = max(1, count)
+        let w: CGFloat = 18, h: CGFloat = 18
+        let gap: CGFloat = n > 3 ? 1 : 2
+        let barH = min(4, (14 - gap * CGFloat(n - 1)) / CGFloat(n))
+        let totalH = barH * CGFloat(n) + gap * CGFloat(n - 1)
+        let img = NSImage(size: NSSize(width: w, height: h), flipped: false) { rect in
+            let alpha: CGFloat = stale ? 0.4 : 1
+            let x: CGFloat = 1, barW = rect.width - 2
+            var y = rect.midY + totalH / 2 - barH
+            for i in 0 ..< n {
+                let track = NSRect(x: x, y: y, width: barW, height: barH)
+                NSColor.labelColor.withAlphaComponent(0.25 * alpha).setFill()
+                NSBezierPath(roundedRect: track, xRadius: barH / 2, yRadius: barH / 2).fill()
+                let pct = i < percents.count ? min(100, max(0, percents[i])) : 0
+                let fillW = max(barH, barW * CGFloat(pct / 100))
+                NSColor.labelColor.withAlphaComponent(alpha).setFill()
+                NSBezierPath(roundedRect: NSRect(x: x, y: y, width: fillW, height: barH), xRadius: barH / 2, yRadius: barH / 2).fill()
+                y -= barH + gap
+            }
             return true
         }
         img.isTemplate = true
@@ -124,6 +128,18 @@ struct MenuBarView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
+            HStack {
+                Text("Icon bars")
+                Spacer()
+                Picker("", selection: Bindable(model).iconBarCount) {
+                    ForEach(1 ... 5, id: \.self) { Text("\($0)").tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 130)
+            }
+            .font(.caption)
+            .controlSize(.small)
             footer
         }
         .padding(14)
