@@ -116,10 +116,11 @@ final class AppModel {
         guard notificationsEnabled else { return }
         for bar in snap.bars {
             let day = CloudflareClient.utcDate()
+            let allowance = bar.id == "ai" ? "daily free allowance" : bar.unit
             if bar.percent >= 95 {
-                ping(id: "\(bar.id)-95-\(day)", title: "\(bar.title) 95%", body: String(format: "%.0f%% of %@", bar.percent, bar.unit))
+                ping(id: "\(bar.id)-95-\(day)", title: "\(bar.title) 95%", body: String(format: "%.0f%% of %@", bar.percent, allowance))
             } else if bar.percent >= 80 {
-                ping(id: "\(bar.id)-80-\(day)", title: "\(bar.title) 80%", body: String(format: "%.0f%% of %@", bar.percent, bar.unit))
+                ping(id: "\(bar.id)-80-\(day)", title: "\(bar.title) 80%", body: String(format: "%.0f%% of %@", bar.percent, allowance))
             }
         }
     }

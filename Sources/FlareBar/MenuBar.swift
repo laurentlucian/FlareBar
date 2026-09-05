@@ -108,7 +108,7 @@ enum IconRenderer {
 
 struct MenuBarView: View {
     @Environment(AppModel.self) private var model
-    static let size = NSSize(width: 280, height: 420)
+    static let size = NSSize(width: 280, height: 480)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -123,7 +123,16 @@ struct MenuBarView: View {
                 ForEach(snap.bars) { bar in
                     barRow(bar)
                 }
-                Text(snap.resetDescription)
+                if let error = snap.aiError {
+                    HStack {
+                        Text("Workers AI")
+                        Spacer()
+                        Text("Unavailable").foregroundStyle(.secondary)
+                    }
+                    .font(.caption)
+                    .help(error)
+                }
+                Text(snap.plan == .paid ? "Other quotas reset next month" : snap.resetDescription)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -215,6 +224,11 @@ struct MenuBarView: View {
             Text("\(fmt(bar.used)) / \(fmt(bar.limit)) \(bar.unit)\(bar.sampled ? " · approx" : "")")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+            if let reset = bar.resetDescription {
+                Text(reset)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

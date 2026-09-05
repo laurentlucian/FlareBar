@@ -11,9 +11,10 @@ public struct QuotaBar: Identifiable, Codable, Equatable {
     public var limit: Double
     public var unit: String
     public var sampled: Bool
+    public var resetDescription: String?
     public var percent: Double { limit <= 0 ? 0 : min(100, used / limit * 100) }
-    public init(id: String, title: String, used: Double, limit: Double, unit: String, sampled: Bool) {
-        self.id = id; self.title = title; self.used = used; self.limit = limit; self.unit = unit; self.sampled = sampled
+    public init(id: String, title: String, used: Double, limit: Double, unit: String, sampled: Bool, resetDescription: String? = nil) {
+        self.id = id; self.title = title; self.used = used; self.limit = limit; self.unit = unit; self.sampled = sampled; self.resetDescription = resetDescription
     }
 }
 
@@ -24,9 +25,10 @@ public struct UsageSnapshot: Codable, Equatable {
     public var bars: [QuotaBar]
     public var fetchedAt: Date
     public var resetDescription: String
+    public var aiError: String?
     public var hottest: QuotaBar? { bars.max(by: { $0.percent < $1.percent }) }
-    public init(plan: Plan, accountName: String, accountTag: String, bars: [QuotaBar], fetchedAt: Date, resetDescription: String) {
-        self.plan = plan; self.accountName = accountName; self.accountTag = accountTag; self.bars = bars; self.fetchedAt = fetchedAt; self.resetDescription = resetDescription
+    public init(plan: Plan, accountName: String, accountTag: String, bars: [QuotaBar], fetchedAt: Date, resetDescription: String, aiError: String? = nil) {
+        self.plan = plan; self.accountName = accountName; self.accountTag = accountTag; self.bars = bars; self.fetchedAt = fetchedAt; self.resetDescription = resetDescription; self.aiError = aiError
     }
 }
 
@@ -120,7 +122,7 @@ public struct CloudflareClient {
         let since = plan == .free ? date : Self.monthStartUTC()
         let metrics = try await metrics(accountTag: account.tag, since: since, until: date)
         let reset = plan == .free ? "Resets 00:00 UTC" : "Resets next month"
-        return UsageSnapshot(
+        var snapshot = UsageSnapshot(
             plan: plan,
             accountName: account.name,
             accountTag: account.tag,
@@ -137,6 +139,43 @@ public struct CloudflareClient {
             fetchedAt: .now,
             resetDescription: reset
         )
+        do {
+            let query = Self.aiQuery(accountTag: account.tag, date: date)
+            let json = try await graphql(query)
+            snapshot.bars.append(try Self.aiBar(json))
+        } catch {
+            snapshot.aiError = error.localizedDescription
+        }
+        return snapshot
+    }
+
+    static func aiQuery(accountTag: String, date: String) -> String {
+        """
+        query {
+          viewer {
+            accounts(filter: {accountTag: "\(accountTag)"}) {
+              aiInferenceAdaptiveGroups(limit: 1, filter: {datetime_geq: "\(date)T00:00:00Z", datetime_leq: "\(date)T23:59:59Z"}) {
+                sum { totalNeurons }
+              }
+            }
+          }
+        }
+        """
+    }
+
+    static func aiBar(_ json: [String: Any]) throws -> QuotaBar {
+        guard let accounts = ((json["data"] as? [String: Any])?["viewer"] as? [String: Any])?["accounts"] as? [[String: Any]],
+              let rows = accounts.first?["aiInferenceAdaptiveGroups"] as? [[String: Any]]
+        else { throw CloudflareError.decode }
+        var neurons = 0.0
+        for row in rows {
+            guard let value = (row["sum"] as? [String: Any])?["totalNeurons"] as? NSNumber,
+                  value.doubleValue.isFinite, value.doubleValue >= 0
+            else { throw CloudflareError.decode }
+            neurons += value.doubleValue
+        }
+        return QuotaBar(id: "ai", title: "Workers AI", used: neurons, limit: 10_000,
+                        unit: "neurons/day", sampled: true, resetDescription: "Resets 00:00 UTC")
     }
 
     private struct Account { var tag: String; var name: String }

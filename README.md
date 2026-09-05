@@ -20,6 +20,7 @@ FlareBar is a free, native, read-only Cloudflare usage monitor. It shows your cu
 - **KV** — read operations
 - **D1** — rows read and written
 - **Durable Objects** — requests
+- **Workers AI** — daily neuron allowance
 - **Free and Paid plans** — daily or monthly allowances
 - **Threshold alerts** — notifications at 80% and 95%
 - **Adaptive refresh** — polls less while idle or in Low Power Mode
@@ -47,7 +48,7 @@ You can also paste a Cloudflare API token with Analytics Read access inside Flar
 
 ## How it works
 
-FlareBar queries Cloudflare's GraphQL Analytics API and displays usage against the included Free or Paid allowance. Free usage resets daily at 00:00 UTC; Paid usage resets monthly.
+FlareBar queries Cloudflare's GraphQL Analytics API and displays usage against the included Free or Paid allowance. Free usage resets daily at 00:00 UTC; Paid usage resets monthly, except Workers AI: its 10,000 included neurons reset daily at 00:00 UTC on both plans. Additional AI usage on Paid is billable. If AI analytics is unavailable, other metrics continue refreshing.
 
 Refresh frequency adapts from two minutes while active to thirty minutes while idle or in Low Power Mode. The menu bar ring reflects the highest current percentage and warns at 80% and 95%.
 
