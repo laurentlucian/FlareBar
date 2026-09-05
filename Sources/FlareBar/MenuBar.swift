@@ -130,9 +130,6 @@ struct MenuBarView: View {
                     .font(.caption)
                     .help(error)
                 }
-                Text(snap.plan == .paid ? "Other quotas reset next month" : snap.resetDescription)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
             HStack {
@@ -235,11 +232,6 @@ struct MenuBarView: View {
             Text("\(fmt(bar.used)) / \(fmt(bar.limit)) \(bar.unit)\(bar.sampled ? " · approx" : "")")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-            if let reset = bar.resetDescription {
-                Text(reset)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
         }
     }
 
