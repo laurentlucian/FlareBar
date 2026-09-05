@@ -14,7 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        if let iconURL = Bundle.module.url(
+        let resourceBundle = Bundle.main.resourceURL
+            .flatMap { Bundle(url: $0.appendingPathComponent("FlareBar_FlareBar.bundle")) } ?? Bundle.module
+        if let iconURL = resourceBundle.url(
             forResource: "FlareBarIcon",
             withExtension: "png",
             subdirectory: "Resources"

@@ -21,8 +21,18 @@ final class AppModel {
     var notificationsEnabled: Bool {
         didSet { UserDefaults.standard.set(notificationsEnabled, forKey: "notificationsEnabled") }
     }
-    var iconBarCount: Int {
-        didSet { UserDefaults.standard.set(iconBarCount, forKey: "iconBarCount") }
+    var iconBarIDs: [String] {
+        didSet { UserDefaults.standard.set(iconBarIDs, forKey: "iconBarIDs") }
+    }
+
+    static let iconBarOptions: [(id: String, title: String)] = [
+        ("workers", "Workers"), ("cpu", "CPU"), ("kv", "KV reads"),
+        ("d1r", "D1 reads"), ("d1w", "D1 writes"),
+        ("do", "Durable Objects"), ("ai", "Workers AI"),
+    ]
+
+    var iconBars: [QuotaBar] {
+        iconBarIDs.compactMap { id in snapshot?.bars.first { $0.id == id } }
     }
 
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
@@ -34,7 +44,8 @@ final class AppModel {
     init() {
         notificationsEnabled = UserDefaults.standard.bool(forKey: "notificationsEnabled")
         let stored = UserDefaults.standard.integer(forKey: "iconBarCount")
-        iconBarCount = stored == 0 ? 3 : stored
+        iconBarIDs = UserDefaults.standard.stringArray(forKey: "iconBarIDs")
+            ?? Array(["workers", "kv", "d1r", "d1w", "do"].prefix(stored == 0 ? 3 : max(1, min(5, stored))))
         if let data = UserDefaults.standard.data(forKey: "snapshot"),
            let snap = try? JSONDecoder().decode(UsageSnapshot.self, from: data) {
             snapshot = snap

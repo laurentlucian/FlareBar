@@ -67,14 +67,12 @@ final class MenuBarController: NSObject {
     }
 
     private func updateIcon() {
-        let bars = (model.snapshot?.bars ?? []).sorted { $0.percent > $1.percent }.prefix(model.iconBarCount).map(\.percent)
+        let bars = model.iconBars
         let stale = model.connection != .ready && model.snapshot != nil
-        statusItem.button?.image = IconRenderer.image(percents: Array(bars), count: model.iconBarCount, stale: stale || model.connection == .failed(""))
+        statusItem.button?.image = IconRenderer.image(percents: bars.map(\.percent), count: bars.count, stale: stale || model.connection == .failed(""))
         statusItem.button?.image?.isTemplate = true
-        statusItem.button?.toolTip = model.snapshot.map { snap in
-            snap.bars.sorted { $0.percent > $1.percent }.prefix(model.iconBarCount)
-                .map { String(format: "%@ %.0f%%", $0.title, $0.percent) }.joined(separator: "\n")
-        } ?? "FlareBar"
+        statusItem.button?.toolTip = bars.isEmpty ? "FlareBar" : bars
+            .map { String(format: "%@ %.0f%%", $0.title, $0.percent) }.joined(separator: "\n")
     }
 }
 
@@ -140,12 +138,25 @@ struct MenuBarView: View {
             HStack {
                 Text("Icon bars")
                 Spacer()
-                Picker("", selection: Bindable(model).iconBarCount) {
-                    ForEach(1 ... 5, id: \.self) { Text("\($0)").tag($0) }
+                Menu("Choose (\(model.iconBarIDs.count))") {
+                    ForEach(AppModel.iconBarOptions, id: \.id) { option in
+                        let selected = model.iconBarIDs.contains(option.id)
+                        Toggle(option.title, isOn: Binding(
+                            get: { model.iconBarIDs.contains(option.id) },
+                            set: { enabled in
+                                if enabled {
+                                    model.iconBarIDs.append(option.id)
+                                } else {
+                                    model.iconBarIDs.removeAll { $0 == option.id }
+                                }
+                            }
+                        ))
+                        .disabled(selected ? model.iconBarIDs.count == 1 :
+                            model.iconBarIDs.count == 5 || model.snapshot?.bars.contains { $0.id == option.id } != true)
+                    }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 130)
+                .fixedSize()
+                .help("Choose 1–5 bars. New selections appear last.")
             }
             .font(.caption)
             .controlSize(.small)
