@@ -86,6 +86,64 @@ public enum TokenStore {
         return wranglerToken()
     }
 
+    public static func loadFresh() async -> String? {
+        let manual = (try? String(contentsOf: tokenURL, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let env = ProcessInfo.processInfo.environment["CLOUDFLARE_API_TOKEN"]
+        if manual?.isEmpty == false || env?.isEmpty == false { return load() }
+        return await refreshWranglerTokenIfNeeded() ?? wranglerToken()
+    }
+
+    static var wranglerConfigURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Preferences/.wrangler/config/default.toml")
+    }
+
+    static func wranglerValue(_ key: String, in text: String) -> String? {
+        for line in text.split(separator: "\n") where line.hasPrefix(key) {
+            let parts = line.split(separator: "=", maxSplits: 1)
+            guard parts.count == 2, parts[0].trimmingCharacters(in: .whitespaces) == key else { continue }
+            return parts[1].trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+        }
+        return nil
+    }
+
+    static func refreshWranglerTokenIfNeeded() async -> String? {
+        guard let text = try? String(contentsOf: wranglerConfigURL, encoding: .utf8),
+              let refresh = wranglerValue("refresh_token", in: text),
+              let expiry = wranglerValue("expiration_time", in: text)
+        else { return nil }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = iso.date(from: expiry), date.timeIntervalSinceNow > 60 { return nil }
+
+        var req = URLRequest(url: URL(string: "https://dash.cloudflare.com/oauth2/token")!)
+        req.httpMethod = "POST"
+        req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        var form = URLComponents()
+        form.queryItems = [
+            URLQueryItem(name: "grant_type", value: "refresh_token"),
+            URLQueryItem(name: "refresh_token", value: refresh),
+            URLQueryItem(name: "client_id", value: "54d11594-84e4-41aa-b438-e81b8fa78ee7"),
+        ]
+        req.httpBody = form.percentEncodedQuery?.data(using: .utf8)
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              let http = resp as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let access = obj["access_token"] as? String,
+              let expiresIn = obj["expires_in"] as? Double
+        else { return nil }
+        let newRefresh = obj["refresh_token"] as? String ?? refresh
+        let newExpiry = iso.string(from: Date().addingTimeInterval(expiresIn))
+        let updated = text.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
+            if line.hasPrefix("oauth_token") { return "oauth_token = \"\(access)\"" }
+            if line.hasPrefix("expiration_time") { return "expiration_time = \"\(newExpiry)\"" }
+            if line.hasPrefix("refresh_token") { return "refresh_token = \"\(newRefresh)\"" }
+            return String(line)
+        }.joined(separator: "\n")
+        try? updated.write(to: wranglerConfigURL, atomically: true, encoding: .utf8)
+        return access
+    }
+
     public static func save(_ token: String) throws {
         let dir = tokenURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -185,6 +243,8 @@ public struct CloudflareClient {
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, resp) = try await session.data(for: req)
         guard let http = resp as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            if code == 401 || code == 403 { throw CloudflareError.http(401, "Token expired") }
             throw CloudflareError.graphql("Token cannot list accounts")
         }
         guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],

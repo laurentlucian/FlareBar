@@ -98,7 +98,7 @@ final class AppModel {
     private func performRefresh() async {
         isRefreshing = true
         defer { isRefreshing = false }
-        guard let token = TokenStore.load() else {
+        guard let token = await TokenStore.loadFresh() else {
             connection = .noToken
             return
         }
