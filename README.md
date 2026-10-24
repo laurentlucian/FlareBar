@@ -44,7 +44,7 @@ swift run FlareBar
 
 Requires macOS 14 or later and Swift 6.
 
-You can also paste a Cloudflare API token with Analytics Read access inside FlareBar. It is stored at `~/.config/flarebar/token`.
+You can also paste a Cloudflare API token with Analytics Read, Account Settings Read, and Billing Read access inside FlareBar. Billing Read detects the Workers plan; failed lookups preserve the last snapshot and show an error. The token is stored at `~/.config/flarebar/token`.
 
 ## How it works
 

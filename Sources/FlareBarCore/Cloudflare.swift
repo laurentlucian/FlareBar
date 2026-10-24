@@ -260,12 +260,20 @@ public struct CloudflareClient {
         var req = URLRequest(url: URL(string: "https://api.cloudflare.com/client/v4/accounts/\(accountTag)/subscriptions")!)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, resp) = try await session.data(for: req)
-        if let http = resp as? HTTPURLResponse, http.statusCode == 403 || http.statusCode == 401 {
-            return .free
+        guard let http = resp as? HTTPURLResponse else { throw CloudflareError.decode }
+        if http.statusCode == 401 {
+            throw CloudflareError.http(401, "Token expired")
         }
-        guard let http = resp as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else { return .free }
-        let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        let result = obj?["result"] as? [[String: Any]] ?? []
+        if http.statusCode == 403 {
+            throw CloudflareError.graphql("Plan unavailable. Token needs Billing Read.")
+        }
+        guard (200 ..< 300).contains(http.statusCode) else {
+            throw CloudflareError.http(http.statusCode, "Plan lookup failed")
+        }
+        guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              obj["success"] as? Bool == true,
+              let result = obj["result"] as? [[String: Any]]
+        else { throw CloudflareError.decode }
         let paid = result.contains { row in
             let ratePlan = (row["rate_plan"] as? [String: Any])?["id"] as? String ?? ""
             let product = (row["product"] as? [String: Any])?["public_name"] as? String ?? ""
