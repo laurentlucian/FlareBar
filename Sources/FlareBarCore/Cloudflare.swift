@@ -265,7 +265,7 @@ public struct CloudflareClient {
             throw CloudflareError.http(401, "Token expired")
         }
         if http.statusCode == 403 {
-            throw CloudflareError.graphql("Plan unavailable. Token needs Billing Read.")
+            return try await entitlementPlan(accountTag: accountTag)
         }
         guard (200 ..< 300).contains(http.statusCode) else {
             throw CloudflareError.http(http.statusCode, "Plan lookup failed")
@@ -280,6 +280,20 @@ public struct CloudflareClient {
             return ratePlan == "workers_paid" || product.localizedCaseInsensitiveContains("workers paid")
         }
         return paid ? .paid : .free
+    }
+
+    private func entitlementPlan(accountTag: String) async throws -> Plan {
+        var req = URLRequest(url: URL(string: "https://api.cloudflare.com/client/v4/accounts/\(accountTag)/entitlements")!)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (data, resp) = try await session.data(for: req)
+        guard let http = resp as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode),
+              let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              obj["success"] as? Bool == true,
+              let result = obj["result"] as? [[String: Any]],
+              let d1Storage = result.first(where: { $0["id"] as? String == "d1.max_storage_per_db_mb" })
+        else { throw CloudflareError.graphql("Plan unavailable. Token needs Billing Read.") }
+        let freeD1StorageMB = 500.0
+        return Self.num((d1Storage["allocation"] as? [String: Any])?["value"]) > freeD1StorageMB ? .paid : .free
     }
 
     private struct Metrics {
